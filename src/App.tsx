@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Calculator, Clock, DollarSign, TrendingUp, Download, Mail, Sparkles } from 'lucide-react';
+import { Calculator, Clock, DollarSign, TrendingUp, Mail, Sparkles } from 'lucide-react'; // Eliminado 'Download'
 
 interface FormData {
-  email: string; // Nuevo campo para el email
+  email: string;
   profession: string;
   hourlyRate: number;
   socialMedia: number;
@@ -16,7 +16,7 @@ interface FormData {
 
 function App() {
   const [formData, setFormData] = useState<FormData>({
-    email: '', // Inicializar el campo de email
+    email: '',
     profession: '',
     hourlyRate: 0,
     socialMedia: 0,
@@ -31,31 +31,29 @@ function App() {
   const [showResults, setShowResults] = useState(false);
 
   const handleInputChange = (field: keyof FormData, value: string) => {
-    // CAMBIO CLAVE AQUÍ: Manejo explícito para campos de texto y numéricos
     if (field === 'email' || field === 'profession') {
       setFormData(prev => ({
         ...prev,
-        [field]: value // Para email y profesión, guardar el valor directamente como string
+        [field]: value
       }));
     } else {
-      // Para los campos numéricos, parsear a entero y asegurar que no sea negativo
       const parsedValue = parseInt(value);
       setFormData(prev => ({
         ...prev,
-        [field]: isNaN(parsedValue) ? 0 : Math.max(0, parsedValue) // Si es NaN, se establece en 0
+        [field]: isNaN(parsedValue) ? 0 : Math.max(0, parsedValue)
       }));
     }
   };
 
   const calculateResults = () => {
     const automationRates = {
-      socialMedia: 0.5,     // 50%
-      copywriting: 0.7,     // 70%
-      comments: 0.6,        // 60%
-      customerSupport: 0.6, // 60%
-      newsletters: 0.8,     // 80%
-      contentAudit: 0.4,    // 40%
-      salesEmails: 0.6      // 60%
+      socialMedia: 0.5,
+      copywriting: 0.7,
+      comments: 0.6,
+      customerSupport: 0.6,
+      newsletters: 0.8,
+      contentAudit: 0.4,
+      salesEmails: 0.6
     };
 
     const totalWeeklyHours = 
@@ -77,7 +75,7 @@ function App() {
       formData.salesEmails * automationRates.salesEmails;
 
     const monthlyAutomatedHours = automatedHours * 4;
-    const hourlyValue = formData.hourlyRate || 20; // Use user's rate or default to $20
+    const hourlyValue = formData.hourlyRate || 20;
     const monthlySavings = monthlyAutomatedHours * hourlyValue;
 
     return {
@@ -96,7 +94,7 @@ function App() {
     setShowResults(true);
 
     // Enviar datos al webhook de Make
-    // Asegúrate de reemplazar la URL del webhook con la tuya si es diferente
+    // Make se encargará de generar el PDF y enviarlo/descargarlo
     fetch("https://hook.eu2.make.com/vyny56jwlve6q8zunz1sxz9mnqo8uflp", { // URL del webhook de Make
       method: "POST",
       headers: {
@@ -104,22 +102,35 @@ function App() {
       },
       body: JSON.stringify({
         nombre: formData.profession || "Emprendedora digital",
-        email: formData.email, // Ahora el email se envía correctamente
+        email: formData.email,
         total_horas_semanales: results.totalWeeklyHours,
-        horas_liberadas: results.weeklyAutomatedHours.toFixed(1), // Formateado para Make
-        horas_liberadas_mensuales: results.monthlyAutomatedHours.toFixed(1), // Formateado para Make
-        ahorro_usd: results.monthlySavings.toFixed(0), // Formateado para Make
+        horas_liberadas: results.weeklyAutomatedHours.toFixed(1),
+        horas_liberadas_mensuales: results.monthlyAutomatedHours.toFixed(1),
+        ahorro_usd: results.monthlySavings.toFixed(0),
         porcentaje_ventas: "30-60",
         link_asesoria: "https://divia.com/asesoria" // Asegúrate de que este sea el enlace correcto
       })
     })
-    .then(res => res.ok ? console.log("📤 Datos enviados al webhook de Make") : console.error("❌ Error al enviar datos al webhook de Make"))
+    .then(res => {
+      if (res.ok) {
+        console.log("📤 Datos enviados al webhook de Make. La automatización se encargará del PDF.");
+        // Aquí podrías mostrar un mensaje al usuario confirmando el envío y que el PDF será procesado
+      } else {
+        console.error("❌ Error al enviar datos al webhook de Make.");
+      }
+      return res.json(); // O res.text() si Make no devuelve JSON
+    })
+    .then(data => {
+      console.log("Respuesta del webhook de Make:", data);
+      // Si Make devuelve un enlace de descarga de PDF, podrías manejarlo aquí
+      // Por ejemplo: if (data.pdfLink) window.open(data.pdfLink, '_blank');
+    })
     .catch(err => console.error("❌ Error de red al enviar datos al webhook de Make:", err));
   };
 
   const resetCalculator = () => {
     setFormData({
-      email: '', // Resetear el campo de email
+      email: '',
       profession: '',
       hourlyRate: 0,
       socialMedia: 0,
@@ -133,30 +144,7 @@ function App() {
     setShowResults(false);
   };
 
-  // Función para descargar el PDF
-  const handleDownloadPdf = () => {
-    // Asegúrate de que html2pdf esté cargado globalmente (ver nota en la conclusión)
-    if (window.html2pdf) {
-      // El ID del div que contiene tu reporte completo
-      const element = document.getElementById('report-content'); 
-      if (element) {
-        // Opciones de configuración para el PDF
-        const opt = {
-          margin: 0, // Margen establecido a 0 para eliminar espacio blanco inicial
-          filename: `Reporte_DIVIA_${formData.profession || 'anonimo'}.pdf`,
-          image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: { scale: 3, logging: true, dpi: 192, letterRendering: true, useCORS: true }, 
-          jsPDF: { unit: 'in', format: 'letter', orientation: 'landscape' },
-          pagebreak: { mode: ['avoid-all', 'css', 'legacy'] } // Configuración de salto de página
-        };
-        window.html2pdf().set(opt).from(element).save();
-      } else {
-        console.error("No se encontró el elemento 'report-content' para generar el PDF.");
-      }
-    } else {
-      console.error("html2pdf.js no está cargado. Asegúrate de incluirlo en tu index.html.");
-    }
-  };
+  // La función handleDownloadPdf y toda la lógica de html2pdf.js ha sido eliminada.
 
   const questions = [
     { key: 'socialMedia' as keyof FormData, label: '¿Cuántas horas dedicás a crear tu plan de contenido para redes sociales?', icon: '📱' },
@@ -171,8 +159,7 @@ function App() {
   if (showResults) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-rose-50 via-pink-25 to-orange-50 font-inter">
-        {/* Se movió el id="report-content" a este div para incluir todo el contenido del reporte en el PDF */}
-        {/* Se ha añadido un padding-top menor para reducir el espacio en blanco superior en el PDF */}
+        {/* El id="report-content" ahora es solo para referencia visual si lo necesitas, ya no se usa para html2pdf */}
         <div id="report-content" className="container mx-auto px-4 py-2 max-w-4xl"> 
           {/* Header */}
           <div className="text-center mb-8">
@@ -223,8 +210,8 @@ function App() {
             </div>
           </div>
 
-          {/* Salto de página forzado */}
-          <div className="html2pdf__page-break"></div>
+          {/* El salto de página forzado ha sido eliminado ya que Make maneja la generación del PDF */}
+          {/* <div className="html2pdf__page-break"></div> */}
 
           {/* Detailed Report */}
           <div className="bg-white rounded-2xl p-8 shadow-lg border border-rose-100 mb-8">
@@ -282,15 +269,9 @@ function App() {
           </div>
         </div>
 
-        {/* Action Buttons (estos botones no se incluyen en el PDF) */}
+        {/* Action Buttons (el botón de Descargar PDF ha sido eliminado) */}
         <div className="flex flex-wrap justify-center gap-4 mb-8">
-          <button 
-            onClick={handleDownloadPdf} 
-            className="flex items-center bg-white hover:bg-gray-50 text-gray-700 font-medium py-3 px-6 rounded-full border border-gray-200 transition-all duration-300 shadow-md hover:shadow-lg"
-          >
-            <Download className="h-5 w-5 mr-2" />
-            Descargar PDF
-          </button>
+          {/* Botón de Descargar PDF eliminado */}
           <button className="flex items-center bg-white hover:bg-gray-50 text-gray-700 font-medium py-3 px-6 rounded-full border border-gray-200 transition-all duration-300 shadow-md hover:shadow-lg">
             <Mail className="h-5 w-5 mr-2" />
             Enviar por Email
@@ -333,7 +314,7 @@ function App() {
             </h2>
             
             <div className="space-y-6">
-              {/* Nuevo campo de Email */}
+              {/* Campo de Email */}
               <div className="group">
                 <label className="block text-gray-700 font-medium mb-3 text-lg">
                   <span className="mr-3 text-2xl">📧</span>
@@ -346,7 +327,7 @@ function App() {
                   onChange={(e) => handleInputChange('email', e.target.value)}
                   className="w-full px-4 py-4 text-lg border-2 border-gray-200 rounded-xl focus:border-rose-400 focus:ring-4 focus:ring-rose-100 transition-all duration-300 group-hover:border-rose-300"
                   placeholder="tu.email@ejemplo.com"
-                  required // Hace el campo obligatorio
+                  required
                 />
               </div>
 
@@ -428,12 +409,12 @@ function App() {
             <div className="mt-10 text-center">
               <button
                 type="submit"
-                disabled={results.totalWeeklyHours === 0 || !formData.profession.trim() || !formData.email.trim()} // Validación para el email
+                disabled={results.totalWeeklyHours === 0 || !formData.profession.trim() || !formData.email.trim()}
                 className="bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 disabled:from-gray-300 disabled:to-gray-400 text-white font-bold py-4 px-12 rounded-full text-xl transition-all duration-300 transform hover:scale-105 disabled:scale-100 shadow-lg disabled:shadow-none"
               >
                 Calcular mi Potencial de Ahorro ✨
               </button>
-              {(results.totalWeeklyHours === 0 || !formData.profession.trim() || !formData.email.trim()) && ( // Mensaje de validación
+              {(results.totalWeeklyHours === 0 || !formData.profession.trim() || !formData.email.trim()) && (
                 <p className="text-gray-500 mt-3">
                   {!formData.email.trim() ? 'Ingresa tu email para continuar' : !formData.profession.trim() ? 'Contanos a qué te dedicas para continuar' : 'Ingresa al menos una hora para continuar'}
                 </p>
