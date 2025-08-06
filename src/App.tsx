@@ -126,7 +126,7 @@ function App() {
     `;
 
     try {
-      const response = await fetch("https://hook.eu2.make.com/sg3cr6omqvq91nkmyzgtxc6h2bu5mmap", { // URL del webhook de Make
+      const response = await fetch("https://hook.eu2.make.com/wzfxsw7w41g5si6bw99g3n3odsbexi5s", { // URL del webhook de Make
         method: "POST",
         headers: {
           "Content-Type": "application/json"
