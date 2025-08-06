@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calculator, Clock, DollarSign, TrendingUp, Mail, Sparkles } from 'lucide-react'; // Eliminado 'Download'
+import { Calculator, Clock, DollarSign, TrendingUp, Mail, Sparkles } from 'lucide-react';
 
 interface FormData {
   email: string;
@@ -29,6 +29,7 @@ function App() {
   });
   
   const [showResults, setShowResults] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false); // Nuevo estado para el indicador de descarga
 
   const handleInputChange = (field: keyof FormData, value: string) => {
     if (field === 'email' || field === 'profession') {
@@ -89,43 +90,99 @@ function App() {
 
   const results = calculateResults();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setShowResults(true);
+    setIsDownloading(true); // Activar indicador de descarga
 
-    // Enviar datos al webhook de Make
-    // Make se encargará de generar el PDF y enviarlo/descargarlo
-    fetch("https://hook.eu2.make.com/vyny56jwlve6q8zunz1sxz9mnqo8uflp", { // URL del webhook de Make
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        nombre: formData.profession || "Emprendedora digital",
-        email: formData.email,
-        total_horas_semanales: results.totalWeeklyHours,
-        horas_liberadas: results.weeklyAutomatedHours.toFixed(1),
-        horas_liberadas_mensuales: results.monthlyAutomatedHours.toFixed(1),
-        ahorro_usd: results.monthlySavings.toFixed(0),
-        porcentaje_ventas: "30-60",
-        link_asesoria: "https://divia.com/asesoria" // Asegúrate de que este sea el enlace correcto
-      })
-    })
-    .then(res => {
-      if (res.ok) {
-        console.log("📤 Datos enviados al webhook de Make. La automatización se encargará del PDF.");
-        // Aquí podrías mostrar un mensaje al usuario confirmando el envío y que el PDF será procesado
-      } else {
-        console.error("❌ Error al enviar datos al webhook de Make.");
+    // Construir el contenido HTML del reporte para enviar a Make
+    // Es CRÍTICO que este HTML sea bien formado y contenga los estilos inline
+    // o que Google Docs pueda interpretarlos correctamente.
+    const reportHtmlContent = `
+      <div style="font-family: 'Inter', sans-serif; padding: 20px; color: #333;">
+        <h1 style="text-align: center; color: #E54C8A;">Tu Reporte DIVIA</h1>
+        <p style="text-align: center; color: #666;">Descubre tu potencial de automatización</p>
+        
+        <h2 style="color: #E54C8A;">Resumen Personal</h2>
+        <p>Como <strong>${formData.profession || 'emprendedora digital'}</strong>, estás dedicando actualmente <strong>${results.totalWeeklyHours} horas por semana</strong> a tareas operativas. 
+        Con automatización estratégica podrías liberar hasta <strong>${results.weeklyAutomatedHours.toFixed(1)} horas semanales</strong>, 
+        es decir, <strong>${results.monthlyAutomatedHours.toFixed(1)} horas al mes</strong>.</p>
+
+        <h2 style="color: #28A745;">Valor del Tiempo</h2>
+        <p>Con tu valor de <strong>$${results.hourlyValue}/hora</strong>, esto equivale a un ahorro aproximado de <strong>$${results.monthlySavings.toFixed(0)} USD al mes</strong>, 
+        que podrías reinvertir en tu creatividad, descanso o expansión.</p>
+
+        <h2 style="color: #6F42C1;">Potencial de Ventas</h2>
+        <p>Si activás un funnel automatizado y agentes GPT personalizados, podrías aumentar tus ventas 
+        entre un <strong>30% y 60% en tan solo 4 semanas</strong>, como lo hacen las clientas de DIVIA.</p>
+
+        <p style="text-align: center; margin-top: 30px;">
+          <a href="https://divia.com/asesoria" style="display: inline-block; padding: 15px 30px; background: linear-gradient(to right, #E54C8A, #FF69B4); color: white; text-decoration: none; border-radius: 50px; font-weight: bold;">
+            Reservá tu asesoría gratuita DIVIA
+          </a>
+        </p>
+        <p style="text-align: center; font-size: 0.9em; color: #999;">Agenda tu sesión estratégica personalizada</p>
+      </div>
+    `;
+
+    try {
+      const response = await fetch("https://hook.eu2.make.com/sg3cr6omqvq91nkmyzgtxc6h2bu5mmap", { // URL del webhook de Make
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          nombre: formData.profession || "Emprendedora digital",
+          email: formData.email,
+          total_horas_semanales: results.totalWeeklyHours,
+          horas_liberadas: results.weeklyAutomatedHours.toFixed(1),
+          horas_liberadas_mensuales: results.monthlyAutomatedHours.toFixed(1),
+          ahorro_usd: results.monthlySavings.toFixed(0),
+          porcentaje_ventas: "30-60",
+          link_asesoria: "https://divia.com/asesoria",
+          reportContent: reportHtmlContent // Envía el HTML del reporte
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Error en el servidor: ${response.status} - ${errorText}`);
       }
-      return res.json(); // O res.text() si Make no devuelve JSON
-    })
-    .then(data => {
-      console.log("Respuesta del webhook de Make:", data);
-      // Si Make devuelve un enlace de descarga de PDF, podrías manejarlo aquí
-      // Por ejemplo: if (data.pdfLink) window.open(data.pdfLink, '_blank');
-    })
-    .catch(err => console.error("❌ Error de red al enviar datos al webhook de Make:", err));
+
+      // Manejar la respuesta como un Blob (archivo binario)
+      const blob = await response.blob();
+
+      // Obtener el nombre del archivo del encabezado Content-Disposition
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = 'reporte_divia.pdf'; // Nombre por defecto
+      if (contentDisposition && contentDisposition.includes('filename=')) {
+          const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
+          if (filenameMatch && filenameMatch[1]) {
+              filename = filenameMatch[1];
+          }
+      }
+
+      // Crear una URL de objeto para el blob
+      const url = window.URL.createObjectURL(blob);
+
+      // Crear un enlace temporal y simular un clic para descargar
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename; // Nombre del archivo para la descarga
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      // Liberar la URL del objeto cuando ya no sea necesaria
+      window.URL.revokeObjectURL(url);
+      console.log("✅ PDF descargado exitosamente.");
+
+    } catch (error) {
+      console.error("❌ Error al generar o descargar el PDF:", error);
+      alert('Hubo un error al generar el reporte. Por favor, inténtalo de nuevo.');
+    } finally {
+      setIsDownloading(false); // Desactivar indicador de descarga
+    }
   };
 
   const resetCalculator = () => {
@@ -143,8 +200,6 @@ function App() {
     });
     setShowResults(false);
   };
-
-  // La función handleDownloadPdf y toda la lógica de html2pdf.js ha sido eliminada.
 
   const questions = [
     { key: 'socialMedia' as keyof FormData, label: '¿Cuántas horas dedicás a crear tu plan de contenido para redes sociales?', icon: '📱' },
@@ -210,9 +265,6 @@ function App() {
             </div>
           </div>
 
-          {/* El salto de página forzado ha sido eliminado ya que Make maneja la generación del PDF */}
-          {/* <div className="html2pdf__page-break"></div> */}
-
           {/* Detailed Report */}
           <div className="bg-white rounded-2xl p-8 shadow-lg border border-rose-100 mb-8">
             <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">Tu Informe Personalizado</h2>
@@ -269,9 +321,30 @@ function App() {
           </div>
         </div>
 
-        {/* Action Buttons (el botón de Descargar PDF ha sido eliminado) */}
+        {/* Action Buttons */}
         <div className="flex flex-wrap justify-center gap-4 mb-8">
-          {/* Botón de Descargar PDF eliminado */}
+          <button 
+            onClick={handleSubmit} // Llama a handleSubmit para generar y descargar el PDF
+            disabled={isDownloading} // Deshabilita el botón durante la descarga
+            className="flex items-center bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-bold py-3 px-6 rounded-full transition-all duration-300 transform hover:scale-105 shadow-lg"
+          >
+            {isDownloading ? (
+              <>
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Generando PDF...
+              </>
+            ) : (
+              <>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-download h-5 w-5 mr-2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>
+                </svg>
+                Descargar Reporte PDF
+              </>
+            )}
+          </button>
           <button className="flex items-center bg-white hover:bg-gray-50 text-gray-700 font-medium py-3 px-6 rounded-full border border-gray-200 transition-all duration-300 shadow-md hover:shadow-lg">
             <Mail className="h-5 w-5 mr-2" />
             Enviar por Email
